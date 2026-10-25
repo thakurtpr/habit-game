@@ -3,8 +3,6 @@ export interface Point {
   readonly y: number;
 }
 
-export type LivenessChallenge = "blink" | "turn";
-
 export interface PoseSample {
   /** Eye aspect ratio averaged over both eyes. */
   readonly ear: number;
@@ -73,13 +71,7 @@ function turned(samples: readonly PoseSample[]): boolean {
   return samples.some((s, i) => i > start && Math.abs(s.yaw - resting) >= YAW_TURN_DELTA);
 }
 
-export function isChallengeMet(
-  challenge: LivenessChallenge,
-  samples: readonly PoseSample[],
-): boolean {
-  return challenge === "blink" ? blinked(samples) : turned(samples);
-}
-
-export function pickChallenge(random: () => number = Math.random): LivenessChallenge {
-  return random() < 0.5 ? "blink" : "turn";
+/** Live when the person blinked or turned their head, whichever comes first. */
+export function isLive(samples: readonly PoseSample[]): boolean {
+  return blinked(samples) || turned(samples);
 }

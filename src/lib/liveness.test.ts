@@ -2,8 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   averageEar,
   eyeAspectRatio,
-  isChallengeMet,
-  pickChallenge,
+  isLive,
   yawRatio,
   type Point,
   type PoseSample,
@@ -52,55 +51,54 @@ describe("averageEar / yawRatio", () => {
   });
 });
 
-describe("isChallengeMet (blink)", () => {
+describe("isLive (blink)", () => {
   test("needs open, then closed, then open again", () => {
-    expect(isChallengeMet("blink", [sample(0.3), sample(0.1), sample(0.3)])).toBe(true);
+    expect(isLive([sample(0.3), sample(0.1), sample(0.3)])).toBe(true);
   });
 
   test("a face that never closes its eyes fails", () => {
-    expect(isChallengeMet("blink", [sample(0.3), sample(0.31), sample(0.29)])).toBe(false);
+    expect(isLive([sample(0.3), sample(0.31), sample(0.29)])).toBe(false);
   });
 
   test("eyes that start closed and only open do not count", () => {
-    expect(isChallengeMet("blink", [sample(0.1), sample(0.3), sample(0.3)])).toBe(false);
+    expect(isLive([sample(0.1), sample(0.3), sample(0.3)])).toBe(false);
   });
 
-  test("adapts to a smaller natural eye opening by comparing with the person's own baseline", () => {
-    expect(isChallengeMet("blink", [sample(0.22), sample(0.22), sample(0.15), sample(0.22)])).toBe(true);
+  test("adapts to a smaller natural eye opening by using the person's own baseline", () => {
+    expect(isLive([sample(0.22), sample(0.22), sample(0.15), sample(0.22)])).toBe(true);
   });
 
   test("ignores normal measurement jitter", () => {
-    expect(isChallengeMet("blink", [sample(0.3), sample(0.28), sample(0.31), sample(0.29)])).toBe(false);
+    expect(isLive([sample(0.3), sample(0.28), sample(0.31), sample(0.29)])).toBe(false);
   });
 
   test("needs the eyes to open again afterwards", () => {
-    expect(isChallengeMet("blink", [sample(0.3), sample(0.1), sample(0.1)])).toBe(false);
+    expect(isLive([sample(0.3), sample(0.1), sample(0.1)])).toBe(false);
   });
 });
 
-describe("isChallengeMet (turn)", () => {
-  test("needs a frontal pose followed by a clear turn", () => {
-    expect(isChallengeMet("turn", [sample(0.3, 0.5), sample(0.3, 0.3)])).toBe(true);
-    expect(isChallengeMet("turn", [sample(0.3, 0.5), sample(0.3, 0.7)])).toBe(true);
+describe("isLive (head turn)", () => {
+  test("needs a frontal pose followed by a clear turn to either side", () => {
+    expect(isLive([sample(0.3, 0.5), sample(0.3, 0.3)])).toBe(true);
+    expect(isLive([sample(0.3, 0.5), sample(0.3, 0.7)])).toBe(true);
   });
 
   test("a still face fails", () => {
-    expect(isChallengeMet("turn", [sample(0.3, 0.5), sample(0.3, 0.52)])).toBe(false);
+    expect(isLive([sample(0.3, 0.5), sample(0.3, 0.52)])).toBe(false);
   });
 
   test("starting already turned does not count", () => {
-    expect(isChallengeMet("turn", [sample(0.3, 0.3), sample(0.3, 0.25)])).toBe(false);
+    expect(isLive([sample(0.3, 0.3), sample(0.3, 0.25)])).toBe(false);
   });
 
   test("measures the turn from the person's own resting pose", () => {
-    expect(isChallengeMet("turn", [sample(0.3, 0.45), sample(0.3, 0.58)])).toBe(true);
-    expect(isChallengeMet("turn", [sample(0.3, 0.45), sample(0.3, 0.5)])).toBe(false);
+    expect(isLive([sample(0.3, 0.45), sample(0.3, 0.58)])).toBe(true);
+    expect(isLive([sample(0.3, 0.45), sample(0.3, 0.5)])).toBe(false);
   });
 });
 
-describe("pickChallenge", () => {
-  test("maps the random source onto both challenges", () => {
-    expect(pickChallenge(() => 0.1)).toBe("blink");
-    expect(pickChallenge(() => 0.9)).toBe("turn");
+describe("isLive (either gesture)", () => {
+  test("no samples is not live", () => {
+    expect(isLive([])).toBe(false);
   });
 });

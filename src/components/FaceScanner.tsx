@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError } from "@/lib/api";
 import { loadFaceEngine, readFace, type FaceApi, type FaceReading } from "@/lib/faceEngine";
-import { isChallengeMet, pickChallenge, type LivenessChallenge, type PoseSample } from "@/lib/liveness";
+import { isLive, type PoseSample } from "@/lib/liveness";
 
 export type ScanMode = "enroll" | "verify";
 
@@ -27,8 +27,8 @@ interface FaceScannerProps {
 
 /** Short gap between frames: a blink only lasts a fraction of a second. */
 const POLL_MS = 20;
-const ALIGN_FRAMES = 5;
-const MIN_FACE_SIZE = 0.2;
+const ALIGN_FRAMES = 3;
+const MIN_FACE_SIZE = 0.12;
 const FRONTAL_TOLERANCE = 0.1;
 const MIN_EAR_FOR_CAPTURE = 0.2;
 const ALIGN_TIMEOUT_MS = 20_000;
@@ -56,12 +56,7 @@ function describeScanError(error: unknown): string {
   return "The face scan could not start. Please try again.";
 }
 
-const CHALLENGE_TEXT: Record<LivenessChallenge, string> = {
-  blink: "Blink once, naturally",
-  turn: "Slowly turn your head to one side",
-};
-
-function titleFor(phase: Phase, mode: ScanMode, challenge: LivenessChallenge | null): string {
+function titleFor(phase: Phase, mode: ScanMode): string {
   switch (phase) {
     case "starting":
       return "Allow camera access";
@@ -70,7 +65,7 @@ function titleFor(phase: Phase, mode: ScanMode, challenge: LivenessChallenge | n
     case "align":
       return "Look at the camera";
     case "challenge":
-      return challenge ? CHALLENGE_TEXT[challenge] : "Almost there";
+      return "Blink, or slowly turn your head";
     case "capture":
       return "Hold still…";
     case "matching":
@@ -112,7 +107,6 @@ async function poll<T>(
 export function FaceScanner({ mode, onCapture, onSuccess, onCancel }: FaceScannerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [phase, setPhase] = useState<Phase>("starting");
-  const [challenge, setChallenge] = useState<LivenessChallenge | null>(null);
   const [captured, setCaptured] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -140,15 +134,19 @@ export function FaceScanner({ mode, onCapture, onSuccess, onCancel }: FaceScanne
       let streak = 0;
       await poll(isCancelled, ALIGN_TIMEOUT_MS, "We couldn't see your face. Face the camera in good light.", async () => {
         const reading = await readFace(faceapi, video);
-        const aligned = reading && reading.sizeRatio >= MIN_FACE_SIZE && isFrontal(reading.pose);
-        streak = aligned ? streak + 1 : 0;
+        if (debug) {
+          setDebugText(
+            reading
+              ? `face ${(reading.sizeRatio * 100).toFixed(0)}%  yaw ${reading.pose.yaw.toFixed(2)}`
+              : "no face found",
+          );
+        }
+        streak = reading && reading.sizeRatio >= MIN_FACE_SIZE ? streak + 1 : 0;
         return streak >= ALIGN_FRAMES ? true : undefined;
       });
     }
 
     async function runLivenessChallenge(faceapi: FaceApi, video: HTMLVideoElement) {
-      const picked = pickChallenge();
-      setChallenge(picked);
       setPhase("challenge");
       const poses: PoseSample[] = [];
       await poll(isCancelled, CHALLENGE_TIMEOUT_MS, "Liveness check failed. Blink or turn your head when asked.", async () => {
@@ -159,7 +157,7 @@ export function FaceScanner({ mode, onCapture, onSuccess, onCancel }: FaceScanne
             setDebugText(`ear ${reading.pose.ear.toFixed(2)}  yaw ${reading.pose.yaw.toFixed(2)}  frames ${poses.length}`);
           }
         }
-        return isChallengeMet(picked, poses) ? true : undefined;
+        return isLive(poses) ? true : undefined;
       });
     }
 
@@ -186,7 +184,6 @@ export function FaceScanner({ mode, onCapture, onSuccess, onCancel }: FaceScanne
     async function run() {
       try {
         setError(null);
-        setChallenge(null);
         setPhase("starting");
         const video = videoRef.current;
         if (!video) return;
@@ -211,6 +208,7 @@ export function FaceScanner({ mode, onCapture, onSuccess, onCancel }: FaceScanne
         if (!cancelled) onSuccess();
       } catch (e: unknown) {
         if (cancelled) return;
+        stream?.getTracks().forEach((track) => track.stop());
         setError(describeScanError(e));
         setPhase("failed");
       }
@@ -242,7 +240,7 @@ export function FaceScanner({ mode, onCapture, onSuccess, onCancel }: FaceScanne
         </div>
 
         <p className="scan-title" role="status">
-          {titleFor(phase, mode, challenge)}
+          {titleFor(phase, mode)}
         </p>
         <p className="scan-hint">{phase === "failed" ? error : HINTS[phase]}</p>
         {debug && <p className="scan-hint" aria-hidden="true">{debugText}</p>}
