@@ -1,10 +1,4 @@
-import {
-  platformAuthenticatorIsAvailable,
-  startAuthentication,
-  startRegistration,
-  type PublicKeyCredentialCreationOptionsJSON,
-  type PublicKeyCredentialRequestOptionsJSON,
-} from "@simplewebauthn/browser";
+import { meanDescriptor } from "./faceMath";
 import type { HabitState } from "./types";
 
 export type SessionStatus = "signed-out" | "locked" | "unlocked";
@@ -48,21 +42,22 @@ const post = <T>(path: string, payload: unknown = {}, keepalive = false): Promis
 
 export const getSession = (): Promise<SessionInfo> => call<SessionInfo>("/api/session");
 
-export function canUseFaceAuth(): Promise<boolean> {
-  return platformAuthenticatorIsAvailable().catch(() => false);
+/** Face scanning needs a camera and a secure origin (https or localhost). */
+export function canUseCamera(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    window.isSecureContext &&
+    typeof navigator.mediaDevices?.getUserMedia === "function"
+  );
 }
 
-export async function signUpWithFace(): Promise<void> {
-  const options = await post<PublicKeyCredentialCreationOptionsJSON>("/api/auth/register/options");
-  const credential = await startRegistration({ optionsJSON: options });
-  await post("/api/auth/register/verify", credential);
+export async function enrollFace(samples: readonly number[][]): Promise<void> {
+  await post("/api/auth/register", { samples });
 }
 
 /** Used for both first sign-in and unlocking a locked session. */
-export async function signInWithFace(): Promise<void> {
-  const options = await post<PublicKeyCredentialRequestOptionsJSON>("/api/auth/login/options");
-  const credential = await startAuthentication({ optionsJSON: options });
-  await post("/api/auth/login/verify", credential);
+export async function matchFace(samples: readonly number[][]): Promise<void> {
+  await post("/api/auth/login", { descriptor: meanDescriptor(samples) });
 }
 
 export const lockSession = (): Promise<unknown> => post("/api/auth/lock", {}, true);
@@ -75,10 +70,5 @@ export const saveHabits = (state: HabitState): Promise<unknown> =>
 
 export function describeAuthError(error: unknown): string {
   if (error instanceof ApiError) return error.message;
-  if (error instanceof Error) {
-    if (error.name === "NotAllowedError") return "Face check was cancelled or timed out.";
-    if (error.name === "InvalidStateError") return "This device already has a face key here.";
-    if (error.name === "SecurityError") return "Face sign-in needs a secure (https) address.";
-  }
   return "Something went wrong. Please try again.";
 }

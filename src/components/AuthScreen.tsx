@@ -1,16 +1,14 @@
 interface AuthScreenProps {
-  readonly busy: boolean;
   readonly error: string | null;
-  readonly faceSupported: boolean;
+  readonly cameraSupported: boolean;
   readonly signupAllowed: boolean;
   readonly onSignIn: () => void;
   readonly onSignUp: () => void;
 }
 
 export function AuthScreen({
-  busy,
   error,
-  faceSupported,
+  cameraSupported,
   signupAllowed,
   onSignIn,
   onSignUp,
@@ -25,22 +23,21 @@ export function AuthScreen({
         </div>
         <h1 id="auth-title">Face sign-in</h1>
         <p className="muted">
-          No username, no password. Your device checks your face (Face ID, Touch ID or Windows
-          Hello) and this site only receives a signed yes.
+          No username, no password. Allow your camera, look at it, and blink or turn your head
+          when asked. If your face matches, you&apos;re in.
         </p>
 
-        {!faceSupported && (
+        {!cameraSupported && (
           <p className="notice" role="alert">
-            This device has no face or fingerprint unlock set up. Turn one on in your system
-            settings, or open the site on your phone.
+            Face scanning needs a camera and a secure address (https or localhost).
           </p>
         )}
 
-        <button className="btn primary" onClick={onSignIn} disabled={busy || !faceSupported}>
-          {busy ? "Waiting for your face…" : "Sign in with face"}
+        <button className="btn primary" onClick={onSignIn} disabled={!cameraSupported}>
+          Sign in with face
         </button>
         {signupAllowed ? (
-          <button className="btn" onClick={onSignUp} disabled={busy || !faceSupported}>
+          <button className="btn" onClick={onSignUp} disabled={!cameraSupported}>
             Sign up with face
           </button>
         ) : (

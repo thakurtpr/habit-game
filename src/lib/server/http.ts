@@ -36,6 +36,21 @@ export async function isRateLimited(req: Request, bucket: string): Promise<boole
   return count > AUTH_LIMIT;
 }
 
+const MAX_FACE_FAILURES = 8;
+const FAILURE_WINDOW_SECONDS = 10 * 60;
+
+const clientIp = (req: Request): string =>
+  req.headers.get("x-forwarded-for")?.split(",")[0].trim() ?? "local";
+
+/** Repeated failed face scans from one address are blocked for a while. */
+export async function hasTooManyFailures(req: Request): Promise<boolean> {
+  return (await getStore().count(`face-fail:${clientIp(req)}`)) >= MAX_FACE_FAILURES;
+}
+
+export async function recordFailure(req: Request): Promise<void> {
+  await getStore().hit(`face-fail:${clientIp(req)}`, FAILURE_WINDOW_SECONDS);
+}
+
 /** Common gate for POST/PUT routes: same-origin + rate limit. Returns an error response or null. */
 export async function guardMutation(
   req: Request,

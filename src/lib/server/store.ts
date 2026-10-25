@@ -4,10 +4,10 @@ import { IS_PROD } from "./env";
 export interface Store {
   get<T>(key: string): Promise<T | null>;
   set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
-  /** Read and delete in one step (used for one-time challenges). */
-  take<T>(key: string): Promise<T | null>;
   /** Increment a counter that expires after `windowSeconds`; returns the new count. */
   hit(key: string, windowSeconds: number): Promise<number>;
+  /** Current value of a counter without changing it. */
+  count(key: string): Promise<number>;
 }
 
 interface MemoryEntry {
@@ -37,10 +37,8 @@ function createMemoryStore(): Store {
       const expiresAt = ttlSeconds ? Date.now() + ttlSeconds * 1000 : null;
       data.set(key, { value, expiresAt });
     },
-    async take<T>(key: string) {
-      const value = read(key) as T | null;
-      data.delete(key);
-      return value;
+    async count(key) {
+      return (read(key) as number | null) ?? 0;
     },
     async hit(key, windowSeconds) {
       const count = ((read(key) as number | null) ?? 0) + 1;
@@ -63,8 +61,8 @@ function createRedisStore(redis: Redis): Store {
       if (ttlSeconds) await redis.set(key, value, { ex: ttlSeconds });
       else await redis.set(key, value);
     },
-    async take<T>(key: string) {
-      return (await redis.getdel<T>(key)) ?? null;
+    async count(key) {
+      return (await redis.get<number>(key)) ?? 0;
     },
     async hit(key, windowSeconds) {
       const count = await redis.incr(key);
